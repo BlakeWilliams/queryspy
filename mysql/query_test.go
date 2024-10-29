@@ -15,7 +15,7 @@ func Test(t *testing.T) {
 		{
 			desc:     "",
 			in:       "sElecT * from foo WhErE id = 1 OR id = 2 OR iD in (1,2,3)",
-			expected: "select * from foo where id = ?",
+			expected: "select * from foo where id = ? or id = ? or iD in ?",
 		},
 	}
 	for _, tC := range testCases {
