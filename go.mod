@@ -1,4 +1,4 @@
-module github.com/blakewilliams/querytracer
+module github.com/blakewilliams/guesswho
 
 go 1.23.2
 

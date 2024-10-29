@@ -6,7 +6,7 @@ import (
 	"net"
 	"os"
 
-	"github.com/blakewilliams/querytracer/mysql"
+	"github.com/blakewilliams/guesswho/mysql"
 )
 
 type queryReader struct{}
