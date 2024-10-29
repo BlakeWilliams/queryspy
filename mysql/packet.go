@@ -5,20 +5,13 @@ import (
 	"io"
 )
 
+// Packet represents a general MySQL packet.
 type Packet struct {
 	header     []byte
 	rawPayload []byte
 }
 
-func (p *Packet) Raw() []byte {
-	raw := make([]byte, 0, len(p.header)+len(p.rawPayload))
-
-	raw = append(raw, p.header...)
-	raw = append(raw, p.rawPayload...)
-
-	return raw
-}
-
+// ReadFrom reads from a given reader to populate the packet data
 func (p *Packet) ReadFrom(conn io.Reader) error {
 	p.header = make([]byte, 4)
 	// Read the 4-byte header
@@ -37,6 +30,8 @@ func (p *Packet) ReadFrom(conn io.Reader) error {
 	return nil
 }
 
+// WriteTo writes the packet to a given writer, copying the bytes received
+// from `ReadFrom` as-is
 func (p *Packet) WriteTo(conn io.Writer) error {
 	if _, err := conn.Write(p.header); err != nil {
 		return err

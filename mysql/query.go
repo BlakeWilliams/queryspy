@@ -28,7 +28,12 @@ func NewQuery(rawQuery string) (*Query, error) {
 		}
 	})
 
-	fullRedacted, err := parser.RedactSQLQuery(rawQuery)
+	orderedQuery, err := parser.NormalizeAlphabetically(rawQuery)
+	if err != nil {
+		return nil, err
+	}
+
+	fullRedacted, err := parser.RedactSQLQuery(orderedQuery)
 	if err != nil {
 		return nil, err
 	}
