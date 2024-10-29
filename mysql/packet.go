@@ -10,6 +10,15 @@ type Packet struct {
 	rawPayload []byte
 }
 
+func (p *Packet) Raw() []byte {
+	raw := make([]byte, 0, len(p.header)+len(p.rawPayload))
+
+	raw = append(raw, p.header...)
+	raw = append(raw, p.rawPayload...)
+
+	return raw
+}
+
 func (p *Packet) ReadFrom(conn io.Reader) error {
 	p.header = make([]byte, 4)
 	// Read the 4-byte header
