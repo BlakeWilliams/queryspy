@@ -57,43 +57,17 @@ func processClient(conn net.Conn, log *slog.Logger) {
 	defer conn.Close() // Ensure the connection is closed when done
 
 	// Handle initial handshake and inform client that SSL is _not_ supported
-	packet := &mysql.Packet{}
-	err = packet.ReadFrom(mysqlConn)
+	authPacket, err := mysql.NewAuthPacket(mysqlConn)
 	if err != nil {
 		panic(err)
 	}
-	if debug {
-		log.Info("cmd from mysql", "cmd", packet.CommandName())
-	}
-
-	payload := packet.RawPayload()
-	protocolVersion := packet.RawPayload()[0]
-
-	payload = payload[1:]
-
-	versionEnd := 0
-	for i, b := range payload {
-		if b == 0x00 {
-			versionEnd = i
-			break
-		}
-	}
-
-	version := payload[:versionEnd]
-	payload = payload[versionEnd+1:]
-
-	// 4 for thread, 8 for auth-plugin-data, 1 for filler
-	payload = payload[4+8+1:]
-	capabilities := payload[:2]
-	capabilities[1] &^= 0x08
-
+	authPacket.RemoveSSLSupport()
 	log.Info(
 		"connecting to mysql",
-		"version", string(version),
-		"protocol_version", int(protocolVersion),
+		"version", authPacket.MySQLVersion,
+		"protocol_version", authPacket.ProtocolVersion,
 	)
-
-	packet.WriteTo(conn)
+	authPacket.WriteTo(conn)
 
 	go func() {
 		for {
