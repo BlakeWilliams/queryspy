@@ -112,6 +112,10 @@ func processClient(ctx context.Context, conn net.Conn, log *slog.Logger, history
 		}
 	}()
 
-	err = <-errCh
-	log.Error("error processing connection", "err", err)
+	select {
+	case <-ctx.Done():
+		log.Error("context canceled", "err", ctx.Err())
+	case err = <-errCh:
+		log.Error("error processing connection", "err", err)
+	}
 }
