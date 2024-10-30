@@ -8,12 +8,14 @@ import (
 )
 
 var parser *sqlparser.Parser
+
 var once sync.Once
 
 type Query struct {
 	Raw      string
 	Redacted string
 	Comments sqlparser.MarginComments
+	Table    string
 	stmt     sqlparser.Statement
 }
 
@@ -28,6 +30,11 @@ func NewQuery(rawQuery string) (*Query, error) {
 		}
 	})
 
+	stmt, err := parser.Parse(rawQuery)
+	if err != nil {
+		return nil, err
+	}
+
 	orderedQuery, err := parser.NormalizeAlphabetically(rawQuery)
 	if err != nil {
 		return nil, err
@@ -40,5 +47,35 @@ func NewQuery(rawQuery string) (*Query, error) {
 	redacted, comments := sqlparser.SplitMarginComments(fullRedacted)
 	redacted = normalizeRegexp.ReplaceAllString(redacted, "?")
 
-	return &Query{Raw: rawQuery, Redacted: redacted, Comments: comments}, nil
+	return &Query{
+		Raw:      rawQuery,
+		Redacted: redacted,
+		Comments: comments,
+		Table:    tableName(stmt),
+	}, nil
+}
+
+func tableName(stmt sqlparser.Statement) string {
+	var tableName string
+
+	sqlparser.Walk(func(node sqlparser.SQLNode) (bool, error) {
+		switch n := node.(type) {
+		case *sqlparser.Select:
+			for _, table := range n.From {
+				if tableExpr, ok := table.(sqlparser.SimpleTableExpr); ok {
+					tableName = sqlparser.String(tableExpr)
+					return false, nil
+				}
+
+				if tableExpr, ok := table.(*sqlparser.AliasedTableExpr); ok {
+					tableName = sqlparser.String(tableExpr)
+					return false, nil
+				}
+			}
+		}
+
+		return true, nil
+	}, stmt)
+
+	return tableName
 }
