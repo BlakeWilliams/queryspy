@@ -54,3 +54,10 @@ func Test(t *testing.T) {
 		})
 	}
 }
+
+func TestQuery_TableName(t *testing.T) {
+	query, err := NewQuery("select * from FoO where id = 1")
+	require.NoError(t, err)
+
+	require.Equal(t, "foo", query.Table)
+}

@@ -2,6 +2,7 @@ package mysql
 
 import (
 	"regexp"
+	"strings"
 	"sync"
 
 	"vitess.io/vitess/go/vt/sqlparser"
@@ -82,5 +83,5 @@ func tableName(stmt sqlparser.Statement) string {
 		return true, nil
 	}, stmt)
 
-	return tableName
+	return strings.ToLower(tableName)
 }
