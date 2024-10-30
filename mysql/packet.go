@@ -48,6 +48,10 @@ func (p *Packet) Payload() []byte {
 }
 
 func (p *Packet) Command() byte {
+	if len(p.rawPayload) < 1 {
+		return 0
+	}
+
 	return p.rawPayload[0]
 }
 

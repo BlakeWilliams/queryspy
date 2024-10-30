@@ -1,12 +1,14 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"log/slog"
 	"net"
 	"os"
 
 	"github.com/blakewilliams/guesswho/mysql"
+	"github.com/blakewilliams/guesswho/tracer"
 )
 
 type queryReader struct{}
@@ -27,34 +29,40 @@ func main() {
 
 	log.Info("listening", "host", "127.0.0.1", "port", port)
 
+	ctx := context.Background()
+
+	history := &tracer.History{Logger: log}
+	go history.Process(ctx)
+
 	for {
 		conn, err := l.Accept()
 		if err != nil {
 			log.Error("error accepting connection", "err", err)
 		}
-		go processClient(conn, log)
+		go processClient(ctx, conn, log, history)
 	}
 }
 
-func processClient(conn net.Conn, log *slog.Logger) {
+func processClient(ctx context.Context, conn net.Conn, log *slog.Logger, history *tracer.History) {
 	debug := os.Getenv("DEBUG") == "1"
+	defer conn.Close() // Ensure the connection is closed when done
 
 	defer func() {
-		r := recover()
+		if r := recover(); r != nil {
+			if err, ok := r.(error); ok {
+				log.Error("panic", "err", err)
+				return
+			}
 
-		if err, ok := r.(error); ok {
-			log.Error("panic", "err", err)
-			return
+			log.Error("panic", "r", r)
 		}
-
-		log.Error("panic", "r", r)
 	}()
 
 	mysqlConn, err := net.Dial("tcp", "127.0.0.1:3306")
 	if err != nil {
 		panic(err)
 	}
-	defer conn.Close() // Ensure the connection is closed when done
+	defer mysqlConn.Close()
 
 	// Handle initial handshake and inform client that SSL is _not_ supported
 	authPacket, err := mysql.NewAuthPacket(mysqlConn)
@@ -69,12 +77,14 @@ func processClient(conn net.Conn, log *slog.Logger) {
 	)
 	authPacket.WriteTo(conn)
 
+	errCh := make(chan error, 1)
+
 	go func() {
 		for {
 			packet := &mysql.Packet{}
 			err = packet.ReadFrom(mysqlConn)
 			if err != nil {
-				panic(err)
+				errCh <- err
 			}
 			if debug {
 				log.Info("cmd from mysql", "cmd", packet.CommandName())
@@ -83,18 +93,25 @@ func processClient(conn net.Conn, log *slog.Logger) {
 		}
 	}()
 
-	for {
-		packet := &mysql.Packet{}
-		err = packet.ReadFrom(conn)
-		if err != nil {
-			panic(err)
+	go func() {
+		for {
+			packet := &mysql.Packet{}
+			err = packet.ReadFrom(conn)
+			if err != nil {
+				errCh <- err
+			}
+			if packet.Command() == mysql.ComQuery {
+				query := string(packet.Payload())
+				history.Queries <- query
+			}
+
+			if debug {
+				log.Info("cmd from client", "cmd", packet.CommandName())
+			}
+			packet.WriteTo(mysqlConn)
 		}
-		if packet.Command() == mysql.ComQuery {
-			log.Info("query from client", "query", string(packet.Payload()))
-		}
-		if debug {
-			log.Info("cmd from client", "cmd", packet.CommandName())
-		}
-		packet.WriteTo(mysqlConn)
-	}
+	}()
+
+	err = <-errCh
+	log.Error("error processing connection", "err", err)
 }
