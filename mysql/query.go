@@ -11,12 +11,17 @@ var parser *sqlparser.Parser
 
 var once sync.Once
 
+// Query exposes data about a SQL query like the table, and the redacted
+// query.
 type Query struct {
-	Raw      string
+	// Raw is the unmodified query provided to MySQL
+	Raw string
+	// Redacted replaces all variables with ?
 	Redacted string
+	// Comments returns the comments stripped from the beginning and end of the query
 	Comments sqlparser.MarginComments
-	Table    string
-	stmt     sqlparser.Statement
+	// Table is the name of the table being queried, if applicable
+	Table string
 }
 
 var normalizeRegexp = regexp.MustCompile(`\:+[a-zA-Z0-9]+( \/\*.*?\*\/)?`)
