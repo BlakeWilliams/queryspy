@@ -43,8 +43,20 @@ func (p *Packet) WriteTo(conn io.Writer) error {
 	return nil
 }
 
+// SeqID returns the sequence ID of the packet
+func (p *Packet) SeqID() int {
+	return int(p.header[3])
+}
+
+// Payload returns the payload of the packet, omitting the first 3 reserved
+// bytes. This is only designed to be called for ComQuery
 func (p *Packet) Payload() []byte {
 	return p.rawPayload[3:]
+}
+
+// RawPayload returns the raw payload of the packet
+func (p *Packet) RawPayload() []byte {
+	return p.rawPayload
 }
 
 func (p *Packet) Command() byte {
@@ -56,6 +68,10 @@ func (p *Packet) Command() byte {
 }
 
 func (p *Packet) CommandName() string {
+	if len(p.rawPayload) < 1 {
+		return "NIL"
+	}
+
 	if res, ok := commandNames[p.rawPayload[0]]; ok {
 		return res
 	}

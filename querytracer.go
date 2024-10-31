@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/binary"
 	"fmt"
 	"log/slog"
 	"net"
@@ -77,6 +78,15 @@ func processClient(ctx context.Context, conn net.Conn, log *slog.Logger, history
 	)
 	authPacket.WriteTo(conn)
 
+	packet := &mysql.Packet{}
+	err = packet.ReadFrom(conn)
+	capabilities := binary.LittleEndian.Uint32(packet.RawPayload()[:4])
+	if capabilities&mysql.ClientCapabilityClientProtocol41 != mysql.ClientCapabilityClientProtocol41 {
+		log.Error("client does not support protocol 41")
+		panic("client does not support protocol 41")
+	}
+	packet.WriteTo(mysqlConn)
+
 	errCh := make(chan error, 1)
 
 	go func() {
@@ -87,7 +97,7 @@ func processClient(ctx context.Context, conn net.Conn, log *slog.Logger, history
 				errCh <- err
 			}
 			if debug {
-				log.Info("cmd from mysql", "cmd", packet.CommandName())
+				log.Info("cmd from mysql", "cmd", packet.CommandName(), "seq", packet.SeqID())
 			}
 			packet.WriteTo(conn)
 		}
@@ -100,13 +110,12 @@ func processClient(ctx context.Context, conn net.Conn, log *slog.Logger, history
 			if err != nil {
 				errCh <- err
 			}
+			if debug {
+				log.Info("cmd from client", "cmd", packet.CommandName(), "seq", packet.SeqID())
+			}
 			if packet.Command() == mysql.ComQuery {
 				query := string(packet.Payload())
 				history.Queries <- query
-			}
-
-			if debug {
-				log.Info("cmd from client", "cmd", packet.CommandName())
 			}
 			packet.WriteTo(mysqlConn)
 		}
