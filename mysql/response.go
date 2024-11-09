@@ -36,17 +36,8 @@ func NewResponse(originalPacket *Packet, message string) Response {
 		payloadFragment = append(payloadFragment, []byte(message)...)
 		payloadFragment = append(payloadFragment, 0x00)
 	} else {
-		messageLen := len([]byte(message))
-		if messageLen > 250 {
-			panic("handle length encoded int correctly")
-		}
 
-		lenenc := make([]byte, 2)
-		binary.BigEndian.PutUint16(lenenc, uint16(messageLen))
-
-		payloadFragment = append(payloadFragment, lenenc[1])
-		payloadFragment = append(payloadFragment, []byte(message)...)
-
+		payloadFragment = append(payloadFragment, LenEncString(message)...)
 	}
 
 	packetLen := make([]byte, 4)
