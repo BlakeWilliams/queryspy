@@ -125,8 +125,16 @@ func processClient(ctx context.Context, conn net.Conn, log *slog.Logger, history
 				sanitized := strings.TrimSpace(query)
 				if strings.HasPrefix(sanitized, "gw") {
 					if strings.HasSuffix(sanitized, "dump") {
-						res := mysql.NewOKPacket(packet, "TODO")
+						err := history.Dump()
+						if err != nil {
+							res := mysql.NewOKPacket(packet, err.Error())
+							res.WriteTo(conn)
+							continue
+						}
+
+						res := mysql.NewOKPacket(packet, "Dump successful")
 						res.WriteTo(conn)
+						continue
 					}
 
 					continue

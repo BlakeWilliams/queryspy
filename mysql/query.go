@@ -1,6 +1,8 @@
 package mysql
 
 import (
+	"crypto/md5"
+	"encoding/hex"
 	"regexp"
 	"strings"
 	"sync"
@@ -84,4 +86,13 @@ func tableName(stmt sqlparser.Statement) string {
 	}, stmt)
 
 	return strings.ToLower(tableName)
+}
+
+func (q *Query) Fingerprint() string {
+	hash := md5.New()
+	hash.Write([]byte(q.Redacted))
+
+	res := hash.Sum(nil)
+
+	return hex.EncodeToString(res)
 }

@@ -2,12 +2,17 @@ package tracer
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"log/slog"
+	"os"
+	"path"
+	"sort"
 	"sync"
 	"sync/atomic"
 
 	"github.com/blakewilliams/guesswho/mysql"
+	"github.com/goccy/go-yaml"
 )
 
 type (
@@ -21,8 +26,13 @@ type (
 
 	Table struct {
 		Name    string
-		Queries map[string]*uint32
+		Queries map[string]queryData
 		mu      sync.RWMutex
+	}
+
+	queryData struct {
+		query *mysql.Query
+		count *uint32
 	}
 )
 
@@ -75,7 +85,7 @@ func (l *History) Table(tableName string) *Table {
 	l.mu.Lock()
 	table = &Table{
 		Name:    tableName,
-		Queries: make(map[string]*uint32),
+		Queries: make(map[string]queryData),
 	}
 	l.Tables[tableName] = table
 	l.mu.Unlock()
@@ -85,16 +95,91 @@ func (l *History) Table(tableName string) *Table {
 
 func (t *Table) Store(query *mysql.Query) uint32 {
 	t.mu.RLock()
-	val, exists := t.Queries[query.Redacted]
+	val, exists := t.Queries[query.Fingerprint()]
 	t.mu.RUnlock()
 
 	if exists {
-		return atomic.AddUint32(val, 1)
+		return atomic.AddUint32(val.count, 1)
 	}
 
 	t.mu.Lock()
 	var i uint32 = 1
-	t.Queries[query.Redacted] = &i
+	t.Queries[query.Fingerprint()] = queryData{query: query, count: &i}
 	t.mu.Unlock()
 	return 1
+}
+
+// TODO this probably needs another mutex
+func (h *History) Dump() error {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+
+	for _, table := range h.Tables {
+		err := table.Dump()
+		if err != nil {
+			return fmt.Errorf("could not dump table %s: %w", table.Name, err)
+		}
+	}
+
+	return nil
+}
+
+func (t *Table) Dump() error {
+	if len(t.Queries) == 0 {
+		return nil
+	}
+
+	os.MkdirAll("out", 0755)
+	f, err := os.OpenFile(path.Join("out", t.Name+".yaml"), os.O_TRUNC|os.O_CREATE|os.O_WRONLY, 0755)
+	if err != nil {
+		return fmt.Errorf("could not open file: %w", err)
+	}
+	defer f.Close()
+
+	res, err := yaml.Marshal(t)
+	if err != nil {
+		panic(err)
+	}
+
+	f.Write([]byte("# This file was auto-generated. DO NOT MODIFY\n"))
+	f.Write(res)
+
+	return nil
+}
+
+func (t *Table) MarshalYAML() (any, error) {
+	type (
+		queryRow struct {
+			Digest string
+		}
+		fileFormat struct {
+			Version int
+			Queries yaml.MapSlice
+		}
+	)
+
+	order := make([]string, 0, len(t.Queries))
+	for query, _ := range t.Queries {
+		order = append(order, query)
+	}
+
+	sort.SliceStable(order, func(i, j int) bool {
+		return order[i] < order[j]
+	})
+
+	root := &fileFormat{
+		Version: 1.0,
+		Queries: make([]yaml.MapItem, 0, len(t.Queries)),
+	}
+
+	for _, fingerprint := range order {
+		root.Queries = append(root.Queries, yaml.MapItem{
+			Key: fingerprint,
+			Value: queryRow{
+				Digest: t.Queries[fingerprint].query.Redacted,
+			},
+		})
+	}
+
+	return root, nil
 }
