@@ -1,21 +1,14 @@
 package mysql
 
 import (
+	"bytes"
 	"encoding/binary"
 )
 
-type Response struct {
-	Seq    int
-	Packet *Packet
-}
+func NewOKPacket(originalPacket *Packet, message string) *Packet {
+	var payload bytes.Buffer
 
-func NewResponse(originalPacket *Packet, message string) Response {
-	res := &Packet{}
-
-	payloadFragment := make([]byte, 0, 30)
-
-	payloadFragment = append(
-		payloadFragment,
+	payload.Write([]byte{
 		// assign 0 as command for OK header
 		0x00,
 		// assign 0 for number of affected rows
@@ -28,29 +21,22 @@ func NewResponse(originalPacket *Packet, message string) Response {
 		// assign 2 bytes of 0's for warnings
 		0x00,
 		0x00,
-	)
+	})
 
 	// dead code needed to handle ok packet when ClientCapabilitySessionTrack is _false_
 	if false {
-		payloadFragment = append(payloadFragment, []byte(message)...)
+		// TODO write nul terminated string if above is not true
 	} else {
-		LenEncString(payloadFragment, message)
+		LenEncString(&payload, message)
 	}
 
-	packetLen := make([]byte, 4)
-	binary.BigEndian.PutUint32(packetLen, uint32(len(payloadFragment)))
-
 	headerFragment := make([]byte, 4)
-	// MySQL uses little endian, this should be abstracted
-	headerFragment[0] = packetLen[3]
-	headerFragment[1] = packetLen[2]
-	headerFragment[2] = packetLen[1]
+	binary.LittleEndian.PutUint32(headerFragment, uint32(payload.Len()))
+	// Hacky, but overwrite the sequence ID with the original packet's sequence ID
 	headerFragment[3] = originalPacket.RawSeq() + 1
 
-	res.header = headerFragment
-	res.rawPayload = payloadFragment
-
-	return Response{
-		Packet: res,
+	return &Packet{
+		header:     headerFragment,
+		rawPayload: payload.Bytes(),
 	}
 }

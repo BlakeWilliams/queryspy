@@ -1,6 +1,8 @@
 package mysql
 
 import (
+	"bytes"
+	"io"
 	"strings"
 	"testing"
 
@@ -41,17 +43,21 @@ func TestLenEncString(t *testing.T) {
 	}
 	for _, tC := range testCases {
 		t.Run(tC.desc, func(t *testing.T) {
-			payload := make([]byte, 0, tC.expectedLength+1)
-			res := LenEncString(payload, tC.input)
+			var buf bytes.Buffer
+			LenEncString(&buf, tC.input)
+			// payload := buf.Bytes()
 
-			require.Equal(t, tC.expectedLength, LenEnc(res))
+			r := bytes.NewReader(buf.Bytes())
+			actualLength, err := lenEnc(r)
+			require.NoError(t, err)
 
-			// Double check header length
-			sizeHeaderLen := uint64(len(res)) - LenEnc(res)
-			require.Equal(t, tC.expectedHeaderLength, sizeHeaderLen)
+			require.NoError(t, err)
+			require.Equal(t, tC.expectedLength, actualLength)
 
-			decodedStr := ReadLenEncString(res)
-			require.Equal(t, tC.input, string(decodedStr))
+			r.Seek(0, io.SeekStart)
+			res, err := ReadLenEncString(r)
+			require.NoError(t, err)
+			require.Equal(t, tC.input, string(res))
 		})
 	}
 }

@@ -1,68 +1,98 @@
 package mysql
 
-func LenEncString(packet []byte, message string) []byte {
+import (
+	"fmt"
+	"io"
+)
+
+func LenEncString(w io.Writer, message string) {
 	messageLen := uint64(len([]byte(message)))
 
 	if messageLen >= 1<<24 {
-		packet = make([]byte, 0, messageLen+9)
-
-		packet = append(
-			packet,
+		w.Write([]byte{
 			0xFE,
 			byte(messageLen),
-			byte(messageLen>>8),
-			byte(messageLen>>16),
-			byte(messageLen>>24),
-			byte(messageLen>>32),
-			byte(messageLen>>40),
-			byte(messageLen>>48),
-			byte(messageLen>>56),
-		)
+			byte(messageLen >> 8),
+			byte(messageLen >> 16),
+			byte(messageLen >> 24),
+			byte(messageLen >> 32),
+			byte(messageLen >> 40),
+			byte(messageLen >> 48),
+			byte(messageLen >> 56),
+		})
 	} else if messageLen >= 1<<16 {
-		packet = make([]byte, 0, messageLen+4)
-
-		packet = append(
-			packet,
+		w.Write([]byte{
 			0xFD,
 			byte(messageLen),
-			byte(messageLen>>8),
-			byte(messageLen>>16),
-		)
+			byte(messageLen >> 8),
+			byte(messageLen >> 16),
+		})
 	} else if messageLen >= 251 {
-		packet = append(
-			packet,
+		w.Write([]byte{
 			0xFC,
 			byte(messageLen),
-			byte(messageLen>>8),
-		)
+			byte(messageLen >> 8),
+		})
 	} else {
-		packet = append(
-			packet,
+		w.Write([]byte{
 			byte(messageLen),
-		)
+		})
 	}
 
-	packet = append(packet, []byte(message)...)
-
-	return packet
+	w.Write([]byte(message))
 }
 
-func LenEnc(message []byte) uint64 {
-	switch message[0] {
+// lenEnc accepts an io.Reader and returns the number of size of the encoded string.
+func lenEnc(r io.Reader) (uint64, error) {
+	initialSize := make([]byte, 1)
+	_, err := r.Read(initialSize)
+	if err != nil {
+		return 0, fmt.Errorf("error reading size of lenenc string: %w", err)
+	}
+
+	switch initialSize[0] {
 	case 0xFC:
-		return uint64(int(message[2]<<8) | int(message[1]))
+		size := make([]byte, 2)
+		_, err := r.Read(size)
+		if err != nil {
+			return 0, fmt.Errorf("error reading remainign size of lenenc string: %w", err)
+		}
+
+		return uint64(int(size[1]<<8) | int(size[0])), nil
 	case 0xFD:
-		return uint64(message[1]) | uint64(message[2])<<8 | uint64(message[3])<<16
+		size := make([]byte, 3)
+		_, err := r.Read(size)
+		if err != nil {
+			return 0, fmt.Errorf("error reading remainign size of lenenc string: %w", err)
+		}
+
+		return uint64(size[0]) | uint64(size[1])<<8 | uint64(size[2])<<16, nil
 	case 0xFE:
-		return uint64(message[1]) | uint64(message[2])<<8 | uint64(message[3])<<16 | uint64(message[4])<<24 | uint64(message[5])<<32 | uint64(message[6])<<40 | uint64(message[7])<<48 | uint64(message[8])<<56
+		size := make([]byte, 8)
+		_, err := r.Read(size)
+		if err != nil {
+			return 0, fmt.Errorf("error reading remainign size of lenenc string: %w", err)
+		}
+
+		return uint64(size[0]) | uint64(size[1])<<8 | uint64(size[2])<<16 | uint64(size[3])<<24 | uint64(size[4])<<32 | uint64(size[5])<<40 | uint64(size[6])<<48 | uint64(size[7])<<56, nil
 	default:
-		return uint64(message[0])
+		return uint64(initialSize[0]), nil
 	}
 }
 
-func ReadLenEncString(message []byte) []byte {
-	payloadSize := LenEnc(message)
-	offset := uint64(len(message)) - payloadSize
+// ReadLenEncString reads a lenenc string from an io.Reader and returns the
+// number of bytes read and the string.
+func ReadLenEncString(r io.Reader) ([]byte, error) {
+	payloadSize, err := lenEnc(r)
+	if err != nil {
+		return nil, fmt.Errorf("error reading lenenc string: %w", err)
+	}
 
-	return message[offset:]
+	message := make([]byte, payloadSize)
+	_, err = r.Read(message)
+	if err != nil {
+		return nil, fmt.Errorf("error reading lenenc string: %w", err)
+	}
+
+	return message, nil
 }
