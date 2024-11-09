@@ -44,7 +44,7 @@ func (l *History) Process(ctx context.Context) {
 		case rawQuery := <-l.Queries:
 			query, err := mysql.NewQuery(rawQuery)
 			if err != nil {
-				l.Logger.Error("could not parse query", "err", err, "query")
+				l.Logger.Error("could not parse query", "err", err, "query", query.Redacted)
 				continue
 			}
 
