@@ -48,6 +48,11 @@ func (p *Packet) SeqID() int {
 	return int(p.header[3])
 }
 
+// SeqID returns the sequence ID of the packet
+func (p *Packet) RawSeq() byte {
+	return p.header[3]
+}
+
 // Payload returns the payload of the packet, omitting the first 3 reserved
 // bytes. This is only designed to be called for ComQuery
 func (p *Packet) Payload() []byte {
@@ -77,4 +82,8 @@ func (p *Packet) CommandName() string {
 	}
 
 	return fmt.Sprintf("%d", p.rawPayload[0])
+}
+
+func (p *Packet) RawHeader() []byte {
+	return p.header
 }

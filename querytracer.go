@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"net"
 	"os"
+	"strings"
 
 	"github.com/blakewilliams/guesswho/mysql"
 	"github.com/blakewilliams/guesswho/tracer"
@@ -81,10 +82,16 @@ func processClient(ctx context.Context, conn net.Conn, log *slog.Logger, history
 	packet := &mysql.Packet{}
 	err = packet.ReadFrom(conn)
 	capabilities := binary.LittleEndian.Uint32(packet.RawPayload()[:4])
+
 	if capabilities&mysql.ClientCapabilityClientProtocol41 != mysql.ClientCapabilityClientProtocol41 {
 		log.Error("client does not support protocol 41")
 		panic("client does not support protocol 41")
 	}
+
+	if capabilities&mysql.ClientCapabilitySessionTrack != mysql.ClientCapabilitySessionTrack {
+		panic("Add support for non-session track")
+	}
+
 	packet.WriteTo(mysqlConn)
 
 	errCh := make(chan error, 1)
@@ -115,6 +122,15 @@ func processClient(ctx context.Context, conn net.Conn, log *slog.Logger, history
 			}
 			if packet.Command() == mysql.ComQuery {
 				query := string(packet.Payload())
+				sanitized := strings.TrimSpace(query)
+				if strings.HasPrefix(sanitized, "gw") {
+					if strings.HasSuffix(sanitized, "dump") {
+						res := mysql.NewResponse(packet, "TODO")
+						res.Packet.WriteTo(conn)
+					}
+
+					continue
+				}
 				history.Queries <- query
 			}
 			packet.WriteTo(mysqlConn)
