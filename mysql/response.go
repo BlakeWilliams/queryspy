@@ -14,30 +14,27 @@ func NewResponse(originalPacket *Packet, message string) Response {
 
 	payloadFragment := make([]byte, 0, 30)
 
-	// assign 0 as command for OK header
-	payloadFragment = append(payloadFragment, 0x00)
-
-	// assign 0 as affected rows
-	payloadFragment = append(payloadFragment, 0x00)
-
-	// assign 0 as last insert id
-	payloadFragment = append(payloadFragment, 0x00)
-
-	// assign 0's for server status flags
-	payloadFragment = append(payloadFragment, 0x00)
-	payloadFragment = append(payloadFragment, 0x00)
-
-	// assign 0's for warnings
-	payloadFragment = append(payloadFragment, 0x00)
-	payloadFragment = append(payloadFragment, 0x00)
+	payloadFragment = append(
+		payloadFragment,
+		// assign 0 as command for OK header
+		0x00,
+		// assign 0 for number of affected rows
+		0x00,
+		// assign 0 as last insert id
+		0x00,
+		// assign 2 bytes of 0's for server status flags
+		0x00,
+		0x00,
+		// assign 2 bytes of 0's for warnings
+		0x00,
+		0x00,
+	)
 
 	// dead code needed to handle ok packet when ClientCapabilitySessionTrack is _false_
 	if false {
 		payloadFragment = append(payloadFragment, []byte(message)...)
-		payloadFragment = append(payloadFragment, 0x00)
 	} else {
-
-		payloadFragment = append(payloadFragment, LenEncString(message)...)
+		LenEncString(payloadFragment, message)
 	}
 
 	packetLen := make([]byte, 4)

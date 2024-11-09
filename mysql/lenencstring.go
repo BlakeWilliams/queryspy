@@ -1,41 +1,45 @@
 package mysql
 
-import (
-	"encoding/binary"
-)
-
-func LenEncString(message string) []byte {
-	var packet []byte
+func LenEncString(packet []byte, message string) []byte {
 	messageLen := uint64(len([]byte(message)))
 
 	if messageLen >= 1<<24 {
 		packet = make([]byte, 0, messageLen+9)
 
-		lenenc := make([]byte, 8)
-		binary.LittleEndian.PutUint64(lenenc, uint64(messageLen))
-		packet = append(packet, 0xFE)
-		packet = append(packet, lenenc...)
+		packet = append(
+			packet,
+			0xFE,
+			byte(messageLen),
+			byte(messageLen>>8),
+			byte(messageLen>>16),
+			byte(messageLen>>24),
+			byte(messageLen>>32),
+			byte(messageLen>>40),
+			byte(messageLen>>48),
+			byte(messageLen>>56),
+		)
 	} else if messageLen >= 1<<16 {
 		packet = make([]byte, 0, messageLen+4)
 
-		lenenc := make([]byte, 4)
-		binary.LittleEndian.PutUint32(lenenc, uint32(messageLen))
-		packet = append(packet, 0xFD)
-		packet = append(packet, lenenc[:3]...)
+		packet = append(
+			packet,
+			0xFD,
+			byte(messageLen),
+			byte(messageLen>>8),
+			byte(messageLen>>16),
+		)
 	} else if messageLen >= 251 {
-		packet = make([]byte, 0, messageLen+3)
-
-		lenenc := make([]byte, 2)
-		binary.LittleEndian.PutUint16(lenenc, uint16(messageLen))
-
-		packet = append(packet, 0xFC)
-		packet = append(packet, lenenc...)
+		packet = append(
+			packet,
+			0xFC,
+			byte(messageLen),
+			byte(messageLen>>8),
+		)
 	} else {
-		packet = make([]byte, 0, messageLen+1)
-
-		lenenc := make([]byte, 2)
-		binary.LittleEndian.PutUint16(lenenc, uint16(messageLen))
-		packet = append(packet, lenenc[0])
+		packet = append(
+			packet,
+			byte(messageLen),
+		)
 	}
 
 	packet = append(packet, []byte(message)...)
@@ -54,4 +58,11 @@ func LenEnc(message []byte) uint64 {
 	default:
 		return uint64(message[0])
 	}
+}
+
+func ReadLenEncString(message []byte) []byte {
+	payloadSize := LenEnc(message)
+	offset := uint64(len(message)) - payloadSize
+
+	return message[offset:]
 }
