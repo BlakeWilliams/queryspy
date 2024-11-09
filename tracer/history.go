@@ -25,12 +25,12 @@ type (
 	}
 
 	Table struct {
-		Name    string
-		Queries map[string]queryData
-		mu      sync.RWMutex
+		Name      string
+		QueryData map[string]queryMeta
+		mu        sync.RWMutex
 	}
 
-	queryData struct {
+	queryMeta struct {
 		query *mysql.Query
 		count *uint32
 	}
@@ -84,8 +84,8 @@ func (l *History) Table(tableName string) *Table {
 
 	l.mu.Lock()
 	table = &Table{
-		Name:    tableName,
-		Queries: make(map[string]queryData),
+		Name:      tableName,
+		QueryData: make(map[string]queryMeta),
 	}
 	l.Tables[tableName] = table
 	l.mu.Unlock()
@@ -95,7 +95,7 @@ func (l *History) Table(tableName string) *Table {
 
 func (t *Table) Store(query *mysql.Query) uint32 {
 	t.mu.RLock()
-	val, exists := t.Queries[query.Fingerprint()]
+	val, exists := t.QueryData[query.Fingerprint()]
 	t.mu.RUnlock()
 
 	if exists {
@@ -104,7 +104,7 @@ func (t *Table) Store(query *mysql.Query) uint32 {
 
 	t.mu.Lock()
 	var i uint32 = 1
-	t.Queries[query.Fingerprint()] = queryData{query: query, count: &i}
+	t.QueryData[query.Fingerprint()] = queryMeta{query: query, count: &i}
 	t.mu.Unlock()
 	return 1
 }
@@ -125,7 +125,10 @@ func (h *History) Dump() error {
 }
 
 func (t *Table) Dump() error {
-	if len(t.Queries) == 0 {
+	t.mu.RLock()
+	defer t.mu.RUnlock()
+
+	if len(t.QueryData) == 0 {
 		return nil
 	}
 
@@ -158,8 +161,8 @@ func (t *Table) MarshalYAML() (any, error) {
 		}
 	)
 
-	order := make([]string, 0, len(t.Queries))
-	for query, _ := range t.Queries {
+	order := make([]string, 0, len(t.QueryData))
+	for query, _ := range t.QueryData {
 		order = append(order, query)
 	}
 
@@ -169,14 +172,14 @@ func (t *Table) MarshalYAML() (any, error) {
 
 	root := &fileFormat{
 		Version: 1.0,
-		Queries: make([]yaml.MapItem, 0, len(t.Queries)),
+		Queries: make([]yaml.MapItem, 0, len(t.QueryData)),
 	}
 
 	for _, fingerprint := range order {
 		root.Queries = append(root.Queries, yaml.MapItem{
 			Key: fingerprint,
 			Value: queryRow{
-				Digest: t.Queries[fingerprint].query.Redacted,
+				Digest: t.QueryData[fingerprint].query.Redacted,
 			},
 		})
 	}
