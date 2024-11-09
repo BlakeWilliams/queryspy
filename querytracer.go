@@ -7,7 +7,9 @@ import (
 	"log/slog"
 	"net"
 	"os"
+	"os/signal"
 	"strings"
+	"syscall"
 
 	"github.com/blakewilliams/guesswho/mysql"
 	"github.com/blakewilliams/guesswho/tracer"
@@ -36,13 +38,21 @@ func main() {
 	history := &tracer.History{Logger: log}
 	go history.Process(ctx)
 
-	for {
-		conn, err := l.Accept()
-		if err != nil {
-			log.Error("error accepting connection", "err", err)
+	go func() {
+		for {
+			conn, err := l.Accept()
+			if err != nil {
+				log.Error("error accepting connection", "err", err)
+			}
+			go processClient(ctx, conn, log, history)
 		}
-		go processClient(ctx, conn, log, history)
-	}
+	}()
+
+	c := make(chan os.Signal, 1)
+	signal.Notify(c, os.Interrupt, syscall.SIGTERM)
+
+	<-c
+	log.Info("shutting down")
 }
 
 func processClient(ctx context.Context, conn net.Conn, log *slog.Logger, history *tracer.History) {

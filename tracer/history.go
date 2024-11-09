@@ -68,7 +68,7 @@ func (l *History) Process(ctx context.Context) {
 
 			l.Logger.Info("query", "table", query.Table, "count", count, "query", query.Redacted)
 		case <-ctx.Done():
-			break
+			return
 		}
 	}
 }
