@@ -100,6 +100,11 @@ func processClient(ctx context.Context, conn net.Conn, log *slog.Logger, history
 		return false
 	})
 
+	proxy.Handle(mysql.ComStmtPrepare, func(p mysql.Packet) bool {
+		history.Queries <- string(p.Payload()[1:])
+		return true
+	})
+
 	err = proxy.Run(ctx)
 	if err != nil {
 		log.Error("proxy run failed", "err", err)

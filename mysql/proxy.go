@@ -56,6 +56,7 @@ func (p *Proxy) Handshake() error {
 	if err != nil {
 		panic(err)
 	}
+
 	authPacket.RemoveSSLSupport()
 	p.Logger.Info(
 		"connecting to mysql",
