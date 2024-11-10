@@ -88,6 +88,7 @@ func (p *Proxy) ProxyAll() error {
 			packet, err := p.ReadPacket(p.mysql)
 			if err != nil {
 				errCh <- err
+				return
 			}
 			if debug {
 				p.Logger.Info("cmd from mysql", "cmd", packet.CommandName(), "seq", packet.Seq())
@@ -101,6 +102,7 @@ func (p *Proxy) ProxyAll() error {
 			packet, err := p.ReadPacket(p.client)
 			if err != nil {
 				errCh <- err
+				return
 			}
 			if debug {
 				p.Logger.Info("cmd from client", "cmd", packet.CommandName(), "seq", packet.Seq())
