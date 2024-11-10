@@ -54,6 +54,6 @@ func NewAuthPacket(conn io.Reader) (*serverAuthPacket, error) {
 	}, nil
 }
 
-func (p *AuthPacket) RemoveSSLSupport() {
-	p.capabilities[1] &^= 0x08
+func (p *serverAuthPacket) RemoveSSLSupport() {
+	p.lowerCapabilities[1] &^= 0x08
 }
