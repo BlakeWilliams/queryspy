@@ -12,6 +12,7 @@ func Test(t *testing.T) {
 		in                string
 		expected          string
 		expectedTableName string
+		expectedError     string
 	}{
 		{
 			desc:              "basic",
@@ -43,10 +44,19 @@ func Test(t *testing.T) {
 			expected:          "select * from foo where `first` = ? and `second` = ?",
 			expectedTableName: "foo",
 		},
+		{
+			desc:          "invalid queries",
+			in:            "gw dump",
+			expectedError: "syntax",
+		},
 	}
 	for _, tC := range testCases {
 		t.Run(tC.desc, func(t *testing.T) {
 			q, err := NewQuery(tC.in)
+			if tC.expectedError != "" {
+				require.ErrorContains(t, err, tC.expectedError)
+				return
+			}
 			require.NoError(t, err)
 
 			require.Equal(t, tC.expected, q.Redacted)

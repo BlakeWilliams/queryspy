@@ -5,7 +5,7 @@ import (
 	"encoding/binary"
 )
 
-func NewOKPacket(originalPacket *Packet, message string) *Packet {
+func NewOKPacket(originalPacket Packet, message string, clientCapabilities clientCapabilities) *rawPacket {
 	var payload bytes.Buffer
 
 	payload.Write([]byte{
@@ -23,20 +23,20 @@ func NewOKPacket(originalPacket *Packet, message string) *Packet {
 		0x00,
 	})
 
-	// dead code needed to handle ok packet when ClientCapabilitySessionTrack is _false_
-	if false {
-		// TODO write nul terminated string if above is not true
-	} else {
+	if clientCapabilities.SessionTrack {
 		LenEncString(&payload, message)
+	} else {
+		payload.Write([]byte(message))
+		payload.WriteByte(0x00)
 	}
 
 	headerFragment := make([]byte, 4)
 	binary.LittleEndian.PutUint32(headerFragment, uint32(payload.Len()))
 	// Hacky, but overwrite the sequence ID with the original packet's sequence ID
-	headerFragment[3] = originalPacket.RawSeq() + 1
+	headerFragment[3] = originalPacket.Seq() + 1
 
-	return &Packet{
-		header:     headerFragment,
-		rawPayload: payload.Bytes(),
+	return &rawPacket{
+		header:  headerFragment,
+		payload: payload.Bytes(),
 	}
 }

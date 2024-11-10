@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"encoding/binary"
 	"fmt"
 	"log/slog"
 	"net"
@@ -50,14 +49,14 @@ func main() {
 
 	c := make(chan os.Signal, 1)
 	signal.Notify(c, os.Interrupt, syscall.SIGTERM)
-
 	<-c
 	log.Info("shutting down")
 }
 
 func processClient(ctx context.Context, conn net.Conn, log *slog.Logger, history *tracer.History) {
-	debug := os.Getenv("DEBUG") == "1"
 	defer conn.Close() // Ensure the connection is closed when done
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
 
 	defer func() {
 		if r := recover(); r != nil {
@@ -67,98 +66,42 @@ func processClient(ctx context.Context, conn net.Conn, log *slog.Logger, history
 			}
 
 			log.Error("panic", "r", r)
+			cancel()
 		}
 	}()
 
-	mysqlConn, err := net.Dial("tcp", "127.0.0.1:3306")
+	proxy, err := mysql.NewProxy(conn, "tcp", "127.0.0.1:3306")
 	if err != nil {
 		panic(err)
 	}
-	defer mysqlConn.Close()
+	defer proxy.Close()
 
-	// Handle initial handshake and inform client that SSL is _not_ supported
-	authPacket, err := mysql.NewAuthPacket(mysqlConn)
+	proxy.Logger = log
+	proxy.Handle(mysql.ComQuery, func(p mysql.Packet) bool {
+		query := string(p.Payload())
+
+		query = strings.TrimSpace(query)
+		if !strings.HasPrefix(query, "gw") {
+			history.Queries <- query
+			return true
+		}
+
+		log.Info("received command", "query", query)
+
+		if strings.HasSuffix(query, "dump") {
+			err := history.Dump()
+			if err != nil {
+				proxy.ReplyClientOK(p, err.Error())
+			}
+		}
+
+		proxy.ReplyClientOK(p, "Dump complete")
+
+		return false
+	})
+
+	err = proxy.Run(ctx)
 	if err != nil {
-		panic(err)
-	}
-	authPacket.RemoveSSLSupport()
-	log.Info(
-		"connecting to mysql",
-		"version", authPacket.MySQLVersion,
-		"protocol_version", authPacket.ProtocolVersion,
-	)
-	authPacket.WriteTo(conn)
-
-	packet := &mysql.Packet{}
-	err = packet.ReadFrom(conn)
-	capabilities := binary.LittleEndian.Uint32(packet.RawPayload()[:4])
-
-	if capabilities&mysql.ClientCapabilityClientProtocol41 != mysql.ClientCapabilityClientProtocol41 {
-		log.Error("client does not support protocol 41")
-		panic("client does not support protocol 41")
-	}
-
-	if capabilities&mysql.ClientCapabilitySessionTrack != mysql.ClientCapabilitySessionTrack {
-		panic("Add support for non-session track")
-	}
-
-	packet.WriteTo(mysqlConn)
-
-	errCh := make(chan error, 1)
-
-	go func() {
-		for {
-			packet := &mysql.Packet{}
-			err = packet.ReadFrom(mysqlConn)
-			if err != nil {
-				errCh <- err
-			}
-			if debug {
-				log.Info("cmd from mysql", "cmd", packet.CommandName(), "seq", packet.SeqID())
-			}
-			packet.WriteTo(conn)
-		}
-	}()
-
-	go func() {
-		for {
-			packet := &mysql.Packet{}
-			err = packet.ReadFrom(conn)
-			if err != nil {
-				errCh <- err
-			}
-			if debug {
-				log.Info("cmd from client", "cmd", packet.CommandName(), "seq", packet.SeqID())
-			}
-			if packet.Command() == mysql.ComQuery {
-				query := string(packet.Payload())
-				sanitized := strings.TrimSpace(query)
-				if strings.HasPrefix(sanitized, "gw") {
-					if strings.HasSuffix(sanitized, "dump") {
-						err := history.Dump()
-						if err != nil {
-							res := mysql.NewOKPacket(packet, err.Error())
-							res.WriteTo(conn)
-							continue
-						}
-
-						res := mysql.NewOKPacket(packet, "Dump successful")
-						res.WriteTo(conn)
-						continue
-					}
-
-					continue
-				}
-				history.Queries <- query
-			}
-			packet.WriteTo(mysqlConn)
-		}
-	}()
-
-	select {
-	case <-ctx.Done():
-		log.Error("context canceled", "err", ctx.Err())
-	case err = <-errCh:
-		log.Error("error processing connection", "err", err)
+		log.Error("proxy run failed", "err", err)
 	}
 }

@@ -4,22 +4,23 @@ import (
 	"io"
 )
 
-type AuthPacket struct {
+type serverAuthPacket struct {
 	ProtocolVersion int
 	MySQLVersion    string
 
-	capabilities []byte
-	*Packet
+	lowerCapabilities []byte
+	upperCapabilities []byte
+	*rawPacket
 }
 
-func NewAuthPacket(conn io.Reader) (*AuthPacket, error) {
-	packet := &Packet{}
+func NewAuthPacket(conn io.Reader) (*serverAuthPacket, error) {
+	packet := &rawPacket{}
 	err := packet.ReadFrom(conn)
 	if err != nil {
 		return nil, err
 	}
 
-	payload := packet.rawPayload
+	payload := packet.payload
 	protocolVersion := payload[0]
 
 	// skip protocol
@@ -38,13 +39,18 @@ func NewAuthPacket(conn io.Reader) (*AuthPacket, error) {
 
 	// 4 for thread, 8 for auth-plugin-data, 1 for filler
 	payload = payload[4+8+1:]
-	capabilities := payload[:2]
+	lowerCapabilities := payload[:2]
 
-	return &AuthPacket{
-		Packet:          packet,
-		MySQLVersion:    string(version),
-		ProtocolVersion: int(protocolVersion),
-		capabilities:    capabilities,
+	// 1 for character set, 2 for character set
+	payload = payload[1+2:]
+	upperCapabilities := payload[:2]
+
+	return &serverAuthPacket{
+		rawPacket:         packet,
+		MySQLVersion:      string(version),
+		ProtocolVersion:   int(protocolVersion),
+		lowerCapabilities: lowerCapabilities,
+		upperCapabilities: upperCapabilities,
 	}, nil
 }
 
