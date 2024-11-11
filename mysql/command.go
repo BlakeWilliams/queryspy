@@ -36,6 +36,7 @@ const (
 )
 
 var commandNames = map[byte]string{
+	OKPacket:            "OK",
 	ComQuit:             "ComQuit",
 	ComInitDB:           "ComInitDB",
 	ComQuery:            "ComQuery",

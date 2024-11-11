@@ -43,6 +43,7 @@ func main() {
 			if err != nil {
 				log.Error("error accepting connection", "err", err)
 			}
+			log.Info("accepted connection", "remote_addr", conn.RemoteAddr().String())
 			go processClient(ctx, conn, log, history)
 		}
 	}()
