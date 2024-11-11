@@ -49,6 +49,12 @@ func Test(t *testing.T) {
 			in:            "gw dump",
 			expectedError: "syntax",
 		},
+		{
+			desc:              "invalid queries",
+			in:                "select * from foo join bar on id = bar.id limit 1",
+			expected:          "select * from foo join bar on id = bar.id limit ?",
+			expectedTableName: "foo",
+		},
 	}
 	for _, tC := range testCases {
 		t.Run(tC.desc, func(t *testing.T) {

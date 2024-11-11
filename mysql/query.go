@@ -79,6 +79,17 @@ func tableName(stmt sqlparser.Statement) string {
 					tableName = sqlparser.String(tableExpr)
 					return false, nil
 				}
+
+				if joinExpr, ok := table.(*sqlparser.JoinTableExpr); ok {
+					if _, ok := joinExpr.LeftExpr.(sqlparser.SimpleTableExpr); ok {
+						tableName = sqlparser.String(joinExpr.LeftExpr)
+						return false, nil
+					}
+					if _, ok := joinExpr.LeftExpr.(*sqlparser.AliasedTableExpr); ok {
+						tableName = sqlparser.String(joinExpr.LeftExpr)
+						return false, nil
+					}
+				}
 			}
 		}
 

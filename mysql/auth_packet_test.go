@@ -27,19 +27,19 @@ func TestAuthPacket(t *testing.T) {
 	require.Equal(t, 10, packet.ProtocolVersion)
 	require.Equal(t, "8.3.0", packet.MySQLVersion)
 
-	require.Equal(t, byte(0xff), packet.capabilities[0])
-	require.Equal(t, byte(0xff), packet.capabilities[1])
+	require.Equal(t, byte(0xff), packet.lowerCapabilities[0])
+	require.Equal(t, byte(0xff), packet.lowerCapabilities[1])
 }
 
-func TestAuthPacket_RemoeSSLSupport(t *testing.T) {
+func TestAuthPacket_RemoveSSLSupport(t *testing.T) {
 	reader := bytes.NewReader(sampleAuth)
 
 	packet, err := NewAuthPacket(reader)
 	require.NoError(t, err)
 
-	require.Equal(t, byte(0xff), packet.capabilities[0])
-	require.Equal(t, byte(0xff), packet.capabilities[1])
+	require.Equal(t, byte(0xff), packet.lowerCapabilities[0])
+	require.Equal(t, byte(0xff), packet.lowerCapabilities[1])
 
 	packet.RemoveSSLSupport()
-	require.Equal(t, byte(0xf7), packet.capabilities[1])
+	require.Equal(t, byte(0xf7), packet.lowerCapabilities[1])
 }
